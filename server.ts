@@ -68,8 +68,8 @@ function loadDatabase(): DatabaseSchema {
       {
         id: 'notif-welcome',
         userId: seed.user.id,
-        title: 'കുടുക്കയിലേക്ക് സ്വാഗതം!',
-        message: 'നിങ്ങളുടെ വരവ് ചിലവ് കണക്കുകൾ കൃത്യമായി രേഖപ്പെടുത്താനും സൂക്ഷിക്കാനും കുടുക്ക തയ്യാറാണ്.',
+        title: 'Welcome to Personal Ledger',
+        message: 'Your personal finance ledger is ready. Plan budgets, record expenses & income, and track mutual fund savings.',
         type: 'insight',
         date: new Date().toISOString(),
         read: false
@@ -77,8 +77,8 @@ function loadDatabase(): DatabaseSchema {
       {
         id: 'notif-daily-reminder',
         userId: seed.user.id,
-        title: 'ദിവസേനയുള്ള ഓർമ്മപ്പെടുത്തൽ (9:00 PM)',
-        message: "ഇന്നത്തെ ചിലവുകളും വരവുകളും ചേർക്കാൻ മറക്കരുത്.",
+        title: 'Daily Expense Reminder (9:00 PM)',
+        message: "Don't forget to record today's expenses and income in Personal Ledger.",
         type: 'daily_reminder',
         date: new Date().toISOString(),
         read: false
@@ -364,17 +364,19 @@ app.get('/api/budgets', (req, res) => {
   const { month } = req.query;
   const currentMonth = month ? String(month) : new Date().toISOString().substring(0, 7);
 
+  if (!db.budgets) db.budgets = [];
+
   let budget = db.budgets.find((b) => b.month === currentMonth);
   if (!budget) {
     // Look for previous month to inherit or fallback default
-    const prevMonth = db.budgets[0];
+    const prevMonth = db.budgets.length > 0 ? db.budgets[0] : null;
     budget = {
       id: `budget-${currentMonth}`,
       userId: db.users[0]?.id || 'user-demo-01',
       month: currentMonth,
       overallBudget: prevMonth ? prevMonth.overallBudget : 75000,
       categoryBudgets: prevMonth ? { ...prevMonth.categoryBudgets } : {},
-      alertThreshold: 0.8,
+      alertThreshold: prevMonth?.alertThreshold ?? 0.8,
       updatedAt: new Date().toISOString()
     };
     db.budgets.push(budget);
@@ -390,24 +392,38 @@ app.post('/api/budgets', (req, res) => {
     return res.status(400).json({ error: 'Month (YYYY-MM) is required' });
   }
 
+  if (!db.budgets) db.budgets = [];
+
   let index = db.budgets.findIndex((b) => b.month === month);
   if (index === -1) {
+    const prevMonth = db.budgets.length > 0 ? db.budgets[0] : null;
+    const initialCategoryBudgets = prevMonth ? { ...prevMonth.categoryBudgets } : {};
+    const mergedCategoryBudgets = categoryBudgets !== undefined
+      ? { ...initialCategoryBudgets, ...categoryBudgets }
+      : initialCategoryBudgets;
+
     const newBudget: Budget = {
       id: `budget-${month}`,
       userId: db.users[0]?.id || 'user-demo-01',
       month,
-      overallBudget: Number(overallBudget) || 0,
-      categoryBudgets: categoryBudgets || {},
-      alertThreshold: alertThreshold !== undefined ? Number(alertThreshold) : 0.8,
+      overallBudget: overallBudget !== undefined ? Number(overallBudget) : (prevMonth ? prevMonth.overallBudget : 75000),
+      categoryBudgets: mergedCategoryBudgets,
+      alertThreshold: alertThreshold !== undefined ? Number(alertThreshold) : (prevMonth ? prevMonth.alertThreshold : 0.8),
       updatedAt: new Date().toISOString()
     };
     db.budgets.push(newBudget);
     index = db.budgets.length - 1;
   } else {
+    // Carefully merge category budgets so existing categories are never wiped out
+    const existingCatBudgets = db.budgets[index].categoryBudgets || {};
+    const mergedCatBudgets = categoryBudgets !== undefined
+      ? { ...existingCatBudgets, ...categoryBudgets }
+      : existingCatBudgets;
+
     db.budgets[index] = {
       ...db.budgets[index],
       overallBudget: overallBudget !== undefined ? Number(overallBudget) : db.budgets[index].overallBudget,
-      categoryBudgets: categoryBudgets !== undefined ? categoryBudgets : db.budgets[index].categoryBudgets,
+      categoryBudgets: mergedCatBudgets,
       alertThreshold: alertThreshold !== undefined ? Number(alertThreshold) : db.budgets[index].alertThreshold,
       updatedAt: new Date().toISOString()
     };

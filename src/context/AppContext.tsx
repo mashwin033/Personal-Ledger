@@ -406,23 +406,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Budgets
   const updateBudget = async (data: { overallBudget?: number; categoryBudgets?: { [catId: string]: number }; alertThreshold?: number }) => {
-    const updated = await apiService.saveBudget({
-      month: currentMonth,
-      ...data
-    });
-    setBudget(updated);
-    showToast('Budgets saved successfully', 'success');
-    await refreshAllData();
+    try {
+      const mergedCategoryBudgets = {
+        ...(budget?.categoryBudgets || {}),
+        ...(data.categoryBudgets || {})
+      };
+
+      const payload = {
+        month: currentMonth,
+        overallBudget: data.overallBudget !== undefined ? data.overallBudget : (budget?.overallBudget ?? 75000),
+        categoryBudgets: mergedCategoryBudgets,
+        alertThreshold: data.alertThreshold !== undefined ? data.alertThreshold : (budget?.alertThreshold ?? 0.8)
+      };
+
+      const updated = await apiService.saveBudget(payload);
+      setBudget(updated);
+      showToast('Budget saved successfully', 'success');
+
+      // Update analytics summary & insights
+      const sumData = await apiService.getInsights(currentMonth).catch(() => null);
+      if (sumData) {
+        setMonthlySummary(sumData.summary);
+        setInsights(sumData.insights);
+      }
+    } catch (err) {
+      console.error('Failed to update budget:', err);
+      showToast('Failed to save budget changes', 'error');
+    }
   };
 
   const copyPreviousMonthBudget = async () => {
-    const [year, month] = currentMonth.split('-').map(Number);
-    const prevDate = new Date(year, month - 2, 1);
-    const prevMonthStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
-    const copied = await apiService.copyPreviousBudget(currentMonth, prevMonthStr);
-    setBudget(copied);
-    showToast(`Copied budget from ${prevMonthStr}`, 'success');
-    await refreshAllData();
+    try {
+      const [year, month] = currentMonth.split('-').map(Number);
+      const prevDate = new Date(year, month - 2, 1);
+      const prevMonthStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+      const copied = await apiService.copyPreviousBudget(currentMonth, prevMonthStr);
+      setBudget(copied);
+      showToast(`Copied budget from ${prevMonthStr}`, 'success');
+
+      const sumData = await apiService.getInsights(currentMonth).catch(() => null);
+      if (sumData) {
+        setMonthlySummary(sumData.summary);
+        setInsights(sumData.insights);
+      }
+    } catch (err) {
+      console.error('Failed to copy previous budget:', err);
+      showToast('Failed to copy previous month budget', 'error');
+    }
   };
 
   // Recurring

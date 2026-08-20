@@ -1,20 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CategoryIcon } from '../common/CategoryIcon';
 import {
   PiggyBank,
   Copy,
-  Plus,
   TrendingUp,
-  AlertTriangle,
-  ShieldAlert,
-  CheckCircle2,
   Sliders,
-  DollarSign,
-  ChevronRight,
-  Sparkles,
   Edit3,
-  Check
+  Check,
+  X,
+  RotateCcw
 } from 'lucide-react';
 
 export const BudgetManagerView: React.FC = () => {
@@ -39,6 +34,19 @@ export const BudgetManagerView: React.FC = () => {
   const [thresholdInput, setThresholdInput] = useState<number>(
     budget?.alertThreshold ? Math.round(budget.alertThreshold * 100) : 80
   );
+
+  // Sync inputs with budget updates
+  useEffect(() => {
+    if (budget?.overallBudget !== undefined) {
+      setOverallInput(String(budget.overallBudget));
+    }
+    if (budget?.alertThreshold !== undefined) {
+      setThresholdInput(Math.round(budget.alertThreshold * 100));
+    }
+  }, [budget?.overallBudget, budget?.alertThreshold]);
+
+  // Filter spending categories only (exclude income categories from expense budgets)
+  const expenseCategories = categories.filter((c) => c.type !== 'income');
 
   const summary = monthlySummary || {
     totalSpent: 0,
@@ -66,8 +74,17 @@ export const BudgetManagerView: React.FC = () => {
 
   const handleSaveCategoryBudget = async (catId: string) => {
     const val = parseFloat(categoryBudgetInput) || 0;
+    // Explicitly copy and merge to preserve all other categories
     const currentCatBudgets = { ...(budget?.categoryBudgets || {}) };
     currentCatBudgets[catId] = val;
+
+    await updateBudget({ categoryBudgets: currentCatBudgets });
+    setEditingCategoryId(null);
+  };
+
+  const handleClearCategoryBudget = async (catId: string) => {
+    const currentCatBudgets = { ...(budget?.categoryBudgets || {}) };
+    currentCatBudgets[catId] = 0;
 
     await updateBudget({ categoryBudgets: currentCatBudgets });
     setEditingCategoryId(null);
@@ -96,7 +113,7 @@ export const BudgetManagerView: React.FC = () => {
               </h2>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Plan category targets, monitor spend velocity, and maintain financial discipline.
+              Plan category targets, monitor spend velocity, and maintain financial discipline for {currentMonth}.
             </p>
           </div>
 
@@ -105,6 +122,7 @@ export const BudgetManagerView: React.FC = () => {
             <button
               onClick={() => copyPreviousMonthBudget()}
               className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+              title="Copy budgets from previous month"
             >
               <Copy size={14} />
               <span>Copy Previous Month</span>
@@ -140,6 +158,10 @@ export const BudgetManagerView: React.FC = () => {
                   type="number"
                   value={overallInput}
                   onChange={(e) => setOverallInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveOverall();
+                    if (e.key === 'Escape') setIsEditingOverall(false);
+                  }}
                   className="w-full px-3 py-1.5 text-lg font-bold rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                   autoFocus
                 />
@@ -234,7 +256,7 @@ export const BudgetManagerView: React.FC = () => {
                 className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
                   thresholdInput === pct
                     ? 'bg-emerald-600 text-white'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
                 }`}
               >
                 {pct}%
@@ -251,12 +273,12 @@ export const BudgetManagerView: React.FC = () => {
             Category Budgets & Breakdown
           </h3>
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {categories.length} Spending Categories
+            {expenseCategories.length} Spending Categories
           </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {categories.map((cat) => {
+          {expenseCategories.map((cat) => {
             const catBudget = (budget?.categoryBudgets && budget.categoryBudgets[cat.id]) || 0;
             const catSummary = summary.categoryBreakdown?.find((c) => c.categoryId === cat.id);
             const spent = catSummary?.spent || 0;
@@ -316,21 +338,58 @@ export const BudgetManagerView: React.FC = () => {
                   {/* Budget Allocation & Edit */}
                   <div className="text-right shrink-0 ml-2">
                     {isEditing ? (
-                      <div className="flex items-center space-x-1">
-                        <input
-                          type="number"
-                          placeholder="0"
-                          value={categoryBudgetInput}
-                          onChange={(e) => setCategoryBudgetInput(e.target.value)}
-                          className="w-20 px-2 py-1 text-xs font-bold rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                          autoFocus
-                        />
-                        <button
-                          onClick={() => handleSaveCategoryBudget(cat.id)}
-                          className="p-1 bg-emerald-600 text-white rounded-lg cursor-pointer"
-                        >
-                          <Check size={14} />
-                        </button>
+                      <div className="flex flex-col items-end space-y-1">
+                        <div className="flex items-center space-x-1">
+                          <input
+                            type="number"
+                            placeholder="0"
+                            value={categoryBudgetInput}
+                            onChange={(e) => setCategoryBudgetInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveCategoryBudget(cat.id);
+                              if (e.key === 'Escape') setEditingCategoryId(null);
+                            }}
+                            className="w-24 px-2 py-1 text-xs font-bold rounded-lg bg-slate-50 dark:bg-slate-800 border border-emerald-500 dark:border-emerald-400 text-slate-900 dark:text-white focus:outline-none"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleSaveCategoryBudget(cat.id)}
+                            title="Save Budget"
+                            className="p-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg cursor-pointer transition-colors"
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button
+                            onClick={() => setEditingCategoryId(null)}
+                            title="Cancel"
+                            className="p-1 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg cursor-pointer transition-colors"
+                          >
+                            <X size={14} />
+                          </button>
+                          {catBudget > 0 && (
+                            <button
+                              onClick={() => handleClearCategoryBudget(cat.id)}
+                              title="Clear / Remove Budget"
+                              className="p-1 bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/60 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 rounded-lg cursor-pointer transition-colors"
+                            >
+                              <RotateCcw size={14} />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Quick Presets */}
+                        <div className="flex items-center space-x-1 pt-0.5">
+                          {[1000, 3000, 5000, 10000].map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => setCategoryBudgetInput(String(preset))}
+                              className="px-1.5 py-0.5 text-[9px] font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/60 text-slate-600 dark:text-slate-300 rounded cursor-pointer"
+                            >
+                              {preset >= 1000 ? `${preset / 1000}k` : preset}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     ) : (
                       <button
