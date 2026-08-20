@@ -510,10 +510,10 @@
       "id": "budget-2026-08",
       "userId": "user-demo-01",
       "month": "2026-08",
-      "overallBudget": 75000,
+      "overallBudget": 85000,
       "categoryBudgets": {
-        "cat-food": 9500,
-        "cat-groceries": 11000,
+        "cat-food": 3000,
+        "cat-groceries": 12000,
         "cat-transport": 3500,
         "cat-fuel": 4000,
         "cat-shopping": 6000,
@@ -529,7 +529,7 @@
         "cat-other": 2000
       },
       "alertThreshold": 0.8,
-      "updatedAt": "2026-08-20T18:14:30.618Z"
+      "updatedAt": "2026-08-20T19:33:57.469Z"
     },
     {
       "id": "budget-2026-07",
