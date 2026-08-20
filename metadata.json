@@ -1,0 +1,6 @@
+{
+  "name": "Personal Ledger",
+  "description": "Smart personal expense, income, savings, and budget ledger",
+  "requestFramePermissions": ["notifications"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
