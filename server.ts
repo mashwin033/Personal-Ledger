@@ -471,7 +471,18 @@ app.get('/api/recurring', (req, res) => {
 });
 
 app.post('/api/recurring', (req, res) => {
-  const { name, amount, categoryId, frequency = 'monthly', dueDay = 1, paymentMethod = 'UPI', notes, autoLogExpense = false } = req.body;
+  const {
+    name,
+    amount,
+    categoryId,
+    frequency = 'monthly',
+    dueDay = 1,
+    paymentMethod = 'UPI',
+    notes,
+    autoLogExpense = false,
+    totalOccurrences,
+    paidOccurrences = 0
+  } = req.body;
   if (!name || !amount || !categoryId) {
     return res.status(400).json({ error: 'Name, amount, and category are required' });
   }
@@ -479,6 +490,10 @@ app.post('/api/recurring', (req, res) => {
   const cat = db.categories.find((c) => c.id === categoryId);
   const now = new Date();
   const nextDueDate = new Date(now.getFullYear(), now.getMonth(), Number(dueDay)).toISOString().split('T')[0];
+
+  const totalNum = totalOccurrences ? Number(totalOccurrences) : undefined;
+  const paidNum = Number(paidOccurrences) || 0;
+  const isCompleted = Boolean(totalNum && totalNum > 0 && paidNum >= totalNum);
 
   const newRec: RecurringPayment = {
     id: `rec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -492,7 +507,10 @@ app.post('/api/recurring', (req, res) => {
     nextDueDate,
     paymentMethod,
     notes,
-    isActive: true,
+    isActive: !isCompleted,
+    isCompleted,
+    totalOccurrences: totalNum,
+    paidOccurrences: paidNum,
     autoLogExpense: Boolean(autoLogExpense),
     createdAt: new Date().toISOString()
   };
@@ -515,10 +533,26 @@ app.put('/api/recurring/:id', (req, res) => {
     if (cat) updates.categoryName = cat.name;
   }
 
+  const existing = db.recurringPayments[idx];
+  const totalNum = updates.totalOccurrences !== undefined
+    ? (updates.totalOccurrences ? Number(updates.totalOccurrences) : undefined)
+    : existing.totalOccurrences;
+  const paidNum = updates.paidOccurrences !== undefined
+    ? Number(updates.paidOccurrences)
+    : (existing.paidOccurrences || 0);
+
+  const isCompleted = updates.isCompleted !== undefined
+    ? Boolean(updates.isCompleted)
+    : Boolean(totalNum && totalNum > 0 && paidNum >= totalNum);
+
   db.recurringPayments[idx] = {
-    ...db.recurringPayments[idx],
+    ...existing,
     ...updates,
-    amount: updates.amount ? Number(updates.amount) : db.recurringPayments[idx].amount
+    amount: updates.amount ? Number(updates.amount) : existing.amount,
+    totalOccurrences: totalNum,
+    paidOccurrences: paidNum,
+    isCompleted,
+    isActive: updates.isActive !== undefined ? Boolean(updates.isActive) : (isCompleted ? false : existing.isActive)
   };
 
   saveDatabase(db);
@@ -544,8 +578,26 @@ app.post('/api/recurring/:id/mark-paid', (req, res) => {
   const paymentDate = date || new Date().toISOString().split('T')[0];
   rec.lastPaidDate = paymentDate;
 
+  // Increment paid count
+  rec.paidOccurrences = (rec.paidOccurrences || 0) + 1;
+
+  // Check if all occurrences completed
+  if (rec.totalOccurrences && rec.totalOccurrences > 0 && rec.paidOccurrences >= rec.totalOccurrences) {
+    rec.isCompleted = true;
+    rec.isActive = false; // Taken out of active recurring bills
+  } else {
+    // advance next due date
+    const curDue = new Date(rec.nextDueDate);
+    curDue.setMonth(curDue.getMonth() + 1);
+    rec.nextDueDate = curDue.toISOString().split('T')[0];
+  }
+
   let createdTx: Transaction | null = null;
   if (createExpense) {
+    const installmentNote = rec.totalOccurrences
+      ? ` (Installment ${rec.paidOccurrences}/${rec.totalOccurrences})`
+      : '';
+
     createdTx = {
       id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       userId: rec.userId,
@@ -557,7 +609,7 @@ app.post('/api/recurring/:id/mark-paid', (req, res) => {
       subCategory: 'Recurring Bill',
       paymentMethod: rec.paymentMethod,
       merchant: rec.name,
-      notes: `Recurring ${rec.frequency} payment (${rec.notes || ''})`.trim(),
+      notes: `Recurring ${rec.frequency} payment${installmentNote} - ${rec.notes || ''}`.trim(),
       isRecurringInstance: true,
       recurringPaymentId: rec.id,
       createdAt: new Date().toISOString()

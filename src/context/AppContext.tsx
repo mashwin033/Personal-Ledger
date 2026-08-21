@@ -483,7 +483,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (res.transaction) {
       setTransactions((prev) => [res.transaction!, ...prev]);
     }
-    showToast(`Marked ${res.recurringPayment.name} as paid`, 'success');
+    if (res.recurringPayment.isCompleted) {
+      showToast(`🎉 All ${res.recurringPayment.totalOccurrences} payments completed for ${res.recurringPayment.name}! Bill concluded.`, 'success');
+    } else if (res.recurringPayment.totalOccurrences) {
+      showToast(`Marked ${res.recurringPayment.name} as paid (${res.recurringPayment.paidOccurrences}/${res.recurringPayment.totalOccurrences})`, 'success');
+    } else {
+      showToast(`Marked ${res.recurringPayment.name} as paid`, 'success');
+    }
     triggerConfetti();
     await refreshAllData();
   };

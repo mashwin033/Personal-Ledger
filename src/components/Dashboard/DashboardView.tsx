@@ -86,7 +86,7 @@ export const DashboardView: React.FC = () => {
   const now = new Date();
   const currentDay = now.getDate();
   const upcomingBills = recurringPayments
-    .filter((r) => r.isActive && r.dueDay >= currentDay)
+    .filter((r) => r.isActive && !r.isCompleted && r.dueDay >= currentDay)
     .sort((a, b) => a.dueDay - b.dueDay)
     .slice(0, 3);
 
@@ -626,8 +626,13 @@ export const DashboardView: React.FC = () => {
                         <p className="font-bold text-slate-900 dark:text-white truncate">
                           {bill.name}
                         </p>
-                        <p className="text-slate-500 dark:text-slate-400 text-[11px]">
-                          {isDueToday ? 'Due Today' : `Due on ${bill.dueDay}th (${daysLeft} days left)`}
+                        <p className="text-slate-500 dark:text-slate-400 text-[11px] flex items-center gap-1.5">
+                          <span>{isDueToday ? 'Due Today' : `Due on ${bill.dueDay}th (${daysLeft}d)`}</span>
+                          {bill.totalOccurrences ? (
+                            <span className="px-1.5 py-0.2 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px]">
+                              {bill.paidOccurrences || 0}/{bill.totalOccurrences}
+                            </span>
+                          ) : null}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">

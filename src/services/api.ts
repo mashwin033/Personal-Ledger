@@ -316,6 +316,8 @@ export const apiService = {
     paymentMethod?: PaymentMethod;
     notes?: string;
     autoLogExpense?: boolean;
+    totalOccurrences?: number;
+    paidOccurrences?: number;
   }): Promise<RecurringPayment> {
     try {
       const res = await fetch(`${API_BASE}/recurring`, {

@@ -523,6 +523,9 @@ export function generateSeedData(userId = 'user-demo-01') {
       notes: 'Auto debited from salary account',
       isActive: true,
       autoLogExpense: true,
+      totalOccurrences: 24,
+      paidOccurrences: 8,
+      isCompleted: false,
       lastPaidDate: makeDate(currentYear, currentMonthNum, 8),
       createdAt: new Date(currentYear, 0, 1).toISOString()
     },

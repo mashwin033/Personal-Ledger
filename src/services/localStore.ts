@@ -351,6 +351,8 @@ export const localStore = {
     paymentMethod?: PaymentMethod;
     notes?: string;
     autoLogExpense?: boolean;
+    totalOccurrences?: number;
+    paidOccurrences?: number;
   }): RecurringPayment {
     const list = this.getRecurring();
     const cats = this.getCategories();
@@ -359,6 +361,10 @@ export const localStore = {
     const now = new Date();
     const dueDay = data.dueDay || 1;
     const nextDueDate = new Date(now.getFullYear(), now.getMonth(), dueDay).toISOString().substring(0, 10);
+
+    const totalNum = data.totalOccurrences ? Number(data.totalOccurrences) : undefined;
+    const paidNum = Number(data.paidOccurrences) || 0;
+    const isCompleted = Boolean(totalNum && totalNum > 0 && paidNum >= totalNum);
 
     const item: RecurringPayment = {
       id: `rec-${Date.now()}`,
@@ -372,7 +378,10 @@ export const localStore = {
       nextDueDate,
       paymentMethod: data.paymentMethod || 'UPI',
       notes: data.notes,
-      isActive: true,
+      isActive: !isCompleted,
+      isCompleted,
+      totalOccurrences: totalNum,
+      paidOccurrences: paidNum,
       autoLogExpense: data.autoLogExpense ?? true,
       createdAt: new Date().toISOString()
     };
@@ -394,7 +403,27 @@ export const localStore = {
       if (cat) catName = cat.name;
     }
 
-    list[index] = { ...list[index], ...updates, categoryName: catName };
+    const existing = list[index];
+    const totalNum = updates.totalOccurrences !== undefined
+      ? (updates.totalOccurrences ? Number(updates.totalOccurrences) : undefined)
+      : existing.totalOccurrences;
+    const paidNum = updates.paidOccurrences !== undefined
+      ? Number(updates.paidOccurrences)
+      : (existing.paidOccurrences || 0);
+
+    const isCompleted = updates.isCompleted !== undefined
+      ? Boolean(updates.isCompleted)
+      : Boolean(totalNum && totalNum > 0 && paidNum >= totalNum);
+
+    list[index] = {
+      ...existing,
+      ...updates,
+      categoryName: catName,
+      totalOccurrences: totalNum,
+      paidOccurrences: paidNum,
+      isCompleted,
+      isActive: updates.isActive !== undefined ? Boolean(updates.isActive) : (isCompleted ? false : existing.isActive)
+    };
     setStorage(STORAGE_KEYS.RECURRING, list);
     return list[index];
   },
@@ -414,15 +443,28 @@ export const localStore = {
     const payDate = date || new Date().toISOString().substring(0, 10);
     item.lastPaidDate = payDate;
 
-    // advance next due date
-    const curDue = new Date(item.nextDueDate);
-    curDue.setMonth(curDue.getMonth() + 1);
-    item.nextDueDate = curDue.toISOString().substring(0, 10);
+    // Increment occurrences
+    item.paidOccurrences = (item.paidOccurrences || 0) + 1;
+
+    // Check if limit reached
+    if (item.totalOccurrences && item.totalOccurrences > 0 && item.paidOccurrences >= item.totalOccurrences) {
+      item.isCompleted = true;
+      item.isActive = false; // Taken out of active bills
+    } else {
+      // advance next due date
+      const curDue = new Date(item.nextDueDate);
+      curDue.setMonth(curDue.getMonth() + 1);
+      item.nextDueDate = curDue.toISOString().substring(0, 10);
+    }
 
     setStorage(STORAGE_KEYS.RECURRING, list);
 
     let createdTx: Transaction | undefined;
     if (createExpense) {
+      const installmentNote = item.totalOccurrences
+        ? ` (Installment ${item.paidOccurrences}/${item.totalOccurrences})`
+        : '';
+
       createdTx = this.addTransaction({
         type: 'expense',
         amount: item.amount,
@@ -430,7 +472,7 @@ export const localStore = {
         categoryId: item.categoryId,
         paymentMethod: item.paymentMethod,
         merchant: item.name,
-        notes: `Recurring Payment: ${item.name}`
+        notes: `Recurring Payment: ${item.name}${installmentNote}`
       });
     }
 

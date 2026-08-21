@@ -65,6 +65,9 @@ export interface RecurringPayment {
   isActive: boolean;
   autoLogExpense?: boolean;
   lastPaidDate?: string;
+  totalOccurrences?: number; // Total number of payments / installments (e.g., 12 for 1-year loan), undefined/null for ongoing
+  paidOccurrences?: number; // Number of payments completed so far
+  isCompleted?: boolean; // True when paidOccurrences >= totalOccurrences
   createdAt: string;
 }
 
